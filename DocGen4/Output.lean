@@ -14,6 +14,7 @@ import DocGen4.Output.References
 import DocGen4.Output.Bibtex
 import DocGen4.Output.SourceLinker
 import DocGen4.Output.Search
+import DocGen4.Output.Supplement
 import DocGen4.Output.ToJson
 import DocGen4.Output.FoundationalTypes
 
@@ -38,6 +39,7 @@ def collectBackrefs (buildDir : System.FilePath) : IO (Array BackrefItem) := do
 
 def htmlOutputSetup (config : SiteBaseContext) : IO Unit := do
   let findBasePath (buildDir : System.FilePath) := basePath buildDir / "find"
+  let supplement := ← loadSupplementJSON (supplementPath config.buildDir)
 
   -- Base structure
   FS.createDirAll <| basePath config.buildDir
@@ -49,7 +51,7 @@ def htmlOutputSetup (config : SiteBaseContext) : IO Unit := do
   let indexHtml := ReaderT.run index config |>.toString
   let notFoundHtml := ReaderT.run notFound config |>.toString
   let foundationalTypesHtml := ReaderT.run foundationalTypes config |>.toString
-  let navbarHtml := ReaderT.run navbar config |>.toString
+  let navbarHtml := ReaderT.run (navbar supplement) config |>.toString
   let searchHtml := ReaderT.run search config |>.toString
   let referencesHtml := ReaderT.run (references (← collectBackrefs config.buildDir)) config |>.toString
   let docGenStatic := #[
@@ -75,6 +77,10 @@ def htmlOutputSetup (config : SiteBaseContext) : IO Unit := do
   for (fileName, content) in docGenStatic do
     FS.writeFile (basePath config.buildDir / fileName) content
 
+  for page in supplement do
+    let html := (supplementPageToHtml page).run config
+    FS.writeFile (basePath config.buildDir / page.fileName) html.toString
+
   let findHtml := ReaderT.run find { config with depthToRoot := 1 } |>.toString
   let findStatic := #[
     ("index.html", findHtml),
@@ -98,6 +104,7 @@ def htmlOutputResults (baseConfig : SiteBaseContext) (result : AnalyzerResult) (
 
   FS.createDirAll <| basePath baseConfig.buildDir
   FS.createDirAll <| declarationsBasePath baseConfig.buildDir
+  FS.createDirAll <| supplementPath baseConfig.buildDir
 
   discard <| htmlOutputDeclarationDatas baseConfig.buildDir result |>.run {} config baseConfig
 
@@ -112,18 +119,28 @@ def htmlOutputResults (baseConfig : SiteBaseContext) (result : AnalyzerResult) (
       currentName := some modName
     }
     let (moduleHtml, cfg) := moduleToHtml module |>.run {} config baseConfig
+    let (pages, cfg) := module.supplementPages.mapM (SupplementPageEntry.renderDocstrings) |>.run cfg config baseConfig
+    let (sections, cfg) := module.supplementSections.mapM (SupplementSectionEntry.renderDocstrings) |>.run cfg config baseConfig
     if not cfg.errors.isEmpty then
       throw <| IO.userError s!"There are errors when generating '{filePath}': {cfg.errors}"
     if let .some d := filePath.parent then
       FS.createDirAll d
     FS.writeFile filePath moduleHtml.toString
     FS.writeFile (declarationsBasePath baseConfig.buildDir / s!"backrefs-{module.name}.json") (toString (toJson cfg.backrefs))
+    saveSupplementPageJSON
+      (supplementPath baseConfig.buildDir / s!"pages-{module.name}.json")
+      pages
+    saveSupplementSectionJSON
+      (supplementPath baseConfig.buildDir / s!"sections-{module.name}.json")
+      sections
     -- The output paths need to be relative to the build directory, as they are stored in a build
     -- artifact.
     outputs := outputs.push relFilePath
+
   return outputs
 
-def getSimpleBaseContext (buildDir : System.FilePath) (hierarchy : Hierarchy) : IO SiteBaseContext := do
+def getSimpleBaseContext (buildDir : System.FilePath) (hierarchy : Hierarchy) :
+    IO SiteBaseContext := do
   let contents ← FS.readFile (declarationsBasePath buildDir / "references.json") <|> (pure "[]")
   match Json.parse contents with
   | .error err =>

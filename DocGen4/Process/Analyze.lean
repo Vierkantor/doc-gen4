@@ -5,12 +5,14 @@ Authors: Henrik Böving
 -/
 
 import Lean.Meta.Basic
+import Lean.Parser.Extension
 import Std.Data.HashMap
 import Std.Data.HashSet
 
 import DocGen4.Process.Base
 import DocGen4.Process.Hierarchy
 import DocGen4.Process.DocInfo
+import DocGen4.Process.Supplement
 
 namespace DocGen4.Process
 
@@ -37,6 +39,14 @@ structure Module where
   -/
   members : Array ModuleMember
   imports : Array Name
+  /--
+  Supplementary pages declared in this module.
+  -/
+  supplementPages : Array (SupplementPageEntry MarkdownDocstring)
+  /--
+  Supplementary sections declared in this module.
+  -/
+  supplementSections : Array (SupplementSectionEntry MarkdownDocstring)
   deriving Inhabited
 
 /--
@@ -92,6 +102,40 @@ def AnalyzeTask.getLoad (task : AnalyzeTask) : Array Name :=
   | .analyzePrefixModules topLevel => #[topLevel]
   | .analyzeConcreteModules modules => modules
 
+/-- Collect info for pages to display in addition to the module docs. -/
+def collectCommands (module : Name) (env : Environment) :
+    MetaM (Array (SupplementSectionEntry MarkdownDocstring)) := do
+  let commands := (Parser.getParserCategory? env `command).get!
+  let mut contents := #[]
+  for (name, ()) in commands.kinds do
+    let some modIdx := env.getModuleIdxFor? name | continue
+    let declMod := env.header.moduleNames[modIdx]!
+    if module != declMod then continue
+    let doc := (← findDocString? env name).getD "No documentation is available for this command."
+    contents := contents.push {
+      pageKey := "Commands",
+      name := name.toString,
+      text := doc,
+      definingModule := declMod,
+      relatedDecls := #[name],
+    }
+  return contents
+
+/-- Collect info for pages to display in addition to the module docs. -/
+def getAdditionalInfo (module : Name) (env : Environment) :
+    MetaM (Array (SupplementPageEntry String) × Array (SupplementSectionEntry MarkdownDocstring)) := do
+  let mut pages := #[]
+  let mut sections := #[]
+
+  sections := sections.append (← collectCommands module env)
+  -- sections := sections.append (← collectHoleCommands module env)
+  -- sections := sections.append (← collectAttributes module env)
+  -- sections := sections.append (← collectLibraryNotes module env)
+
+  -- TODO: read more pages from environment extensions.
+
+  return (pages, sections)
+
 def getAllModuleDocs (relevantModules : Array Name) : MetaM (Std.HashMap Name Module) := do
   let env ← getEnv
   let mut res := Std.HashMap.emptyWithCapacity relevantModules.size
@@ -100,7 +144,8 @@ def getAllModuleDocs (relevantModules : Array Name) : MetaM (Std.HashMap Name Mo
     let some modIdx := env.getModuleIdx? module | unreachable!
     let moduleData := env.header.moduleData[modIdx]!
     let imports := moduleData.imports.map Import.module
-    res := res.insert module <| Module.mk module modDocs imports
+    let (pages, sections) ← getAdditionalInfo module env
+    res := res.insert module <| Module.mk module modDocs imports pages sections
   return res
 
 def mkOptions : IO DocGenOptions := do
