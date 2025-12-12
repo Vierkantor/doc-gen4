@@ -75,6 +75,11 @@ def builtinSupplement : Std.HashMap String (SupplementPage Html) := .ofList [
     intro := <p>Commands provide a way to interact with and modify a Lean environment outside of the context of a proof. Familiar commands from core Lean include <code>#check</code>, <code>#eval</code>, and <code>run_cmd</code>.</p>,
     sections := #[],
   }),
+  ("Tactics", {
+    name := "Tactics",
+    intro := <p>The tactic language is a special-purpose programming language for constructing proofs, indicated using the <code>by</code> keyword.</p>,
+    sections := #[],
+  }),
 ]
 
 open IO in

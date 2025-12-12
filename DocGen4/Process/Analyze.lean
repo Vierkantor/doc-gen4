@@ -4,6 +4,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Henrik Böving
 -/
 
+import Lean.Elab.Tactic.Doc
 import Lean.Meta.Basic
 import Lean.Parser.Extension
 import Std.Data.HashMap
@@ -102,7 +103,7 @@ def AnalyzeTask.getLoad (task : AnalyzeTask) : Array Name :=
   | .analyzePrefixModules topLevel => #[topLevel]
   | .analyzeConcreteModules modules => modules
 
-/-- Collect info for pages to display in addition to the module docs. -/
+/-- Collect command info for pages to display in addition to the module docs. -/
 def collectCommands (module : Name) (env : Environment) :
     MetaM (Array (SupplementSectionEntry MarkdownDocstring)) := do
   let commands := (Parser.getParserCategory? env `command).get!
@@ -121,6 +122,26 @@ def collectCommands (module : Name) (env : Environment) :
     }
   return contents
 
+/-- Collect tactic info for pages to display in addition to the module docs. -/
+def collectTactics (module : Name) (env : Environment) :
+    MetaM (Array (SupplementSectionEntry MarkdownDocstring)) := do
+  let docs ← Elab.Tactic.Doc.allTacticDocs
+  let mut contents := #[]
+  for doc in docs do
+    let some modIdx := env.getModuleIdxFor? doc.internalName | continue
+    let declMod := env.header.moduleNames[modIdx]!
+    if module != declMod then continue
+    let docString := (doc.docString.map (· ++ "\n\n" ++ String.intercalate "\n\n" doc.extensionDocs.toList)).getD
+      "No documentation is available for this command."
+    contents := contents.push {
+      pageKey := "Tactics",
+      name := doc.userName,
+      text := docString,
+      definingModule := declMod,
+      relatedDecls := #[doc.internalName],
+    }
+  return contents
+
 /-- Collect info for pages to display in addition to the module docs. -/
 def getAdditionalInfo (module : Name) (env : Environment) :
     MetaM (Array (SupplementPageEntry String) × Array (SupplementSectionEntry MarkdownDocstring)) := do
@@ -128,6 +149,7 @@ def getAdditionalInfo (module : Name) (env : Environment) :
   let mut sections := #[]
 
   sections := sections.append (← collectCommands module env)
+  sections := sections.append (← collectTactics module env)
   -- sections := sections.append (← collectHoleCommands module env)
   -- sections := sections.append (← collectAttributes module env)
   -- sections := sections.append (← collectLibraryNotes module env)
