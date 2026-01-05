@@ -14,10 +14,11 @@ import DocGen4.Process.Base
 import DocGen4.Process.Hierarchy
 import DocGen4.Process.DocInfo
 import DocGen4.Process.Supplement
+import SubDocGen
 
 namespace DocGen4.Process
 
-open Lean Meta
+open Lean Meta SubDocGen
 
 /--
 Member of a module, either a declaration or some module doc string.
@@ -145,16 +146,14 @@ def collectTactics (module : Name) (env : Environment) :
 /-- Collect info for pages to display in addition to the module docs. -/
 def getAdditionalInfo (module : Name) (env : Environment) :
     MetaM (Array (SupplementPageEntry String) × Array (SupplementSectionEntry MarkdownDocstring)) := do
-  let mut pages := #[]
-  let mut sections := #[]
+  let mut pages := (supplementPageExt.getState env).values.toArray
+  let mut sections := (supplementSectionExt.getState env).values.toArray
 
   sections := sections.append (← collectCommands module env)
   sections := sections.append (← collectTactics module env)
   -- sections := sections.append (← collectHoleCommands module env)
   -- sections := sections.append (← collectAttributes module env)
   -- sections := sections.append (← collectLibraryNotes module env)
-
-  -- TODO: read more pages from environment extensions.
 
   return (pages, sections)
 

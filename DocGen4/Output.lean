@@ -20,7 +20,7 @@ import DocGen4.Output.FoundationalTypes
 
 namespace DocGen4
 
-open Lean IO System Output Process
+open Lean SubDocGen IO System Output Process
 
 def collectBackrefs (buildDir : System.FilePath) : IO (Array BackrefItem) := do
   let mut backrefs : Array BackrefItem := #[]

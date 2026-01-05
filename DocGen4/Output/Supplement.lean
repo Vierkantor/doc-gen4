@@ -5,12 +5,10 @@ Authors: Anne Baanen
 -/
 import DocGen4.Output.Module
 
-namespace DocGen4
-
-namespace Process
+namespace SubDocGen
 
 open scoped DocGen4.Jsx
-open Lean Process
+open DocGen4 Lean
 
 def SupplementSection.renderDocstrings
     (sec : SupplementSection MarkdownDocstring) :
@@ -27,12 +25,12 @@ def SupplementPageEntry.renderDocstrings
     Output.HtmlM (SupplementPageEntry Html) := do
   return { page with sections := ← page.sections.mapM (· |>.renderDocstrings) }
 
-end Process
+end SubDocGen
 
-namespace Output
+namespace DocGen4.Output
 
 open scoped DocGen4.Jsx
-open Lean Process
+open Lean SubDocGen
 
 /--
 Render the HTML for a single section in a supplemental page.

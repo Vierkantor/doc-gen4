@@ -12,6 +12,7 @@ namespace Output
 
 open Lean
 open scoped DocGen4.Jsx
+open SubDocGen
 
 def moduleListFile (file : Name) : BaseHtmlM Html := do
   return <div class={if (← getCurrentName) == file then "nav_link visible" else "nav_link"}>
@@ -54,14 +55,14 @@ def moduleList : BaseHtmlM Html := do
 /--
 Return a list of supplementary pages, linkified and rendered as HTML
 -/
-def supplementList (supplement : Array (Process.SupplementPage textFormat)) : BaseHtmlM (Array Html) := do
+def supplementList (supplement : Array (SupplementPage textFormat)) : BaseHtmlM (Array Html) := do
   supplement.mapM fun page => do
     pure <div class="nav_link"><a href={s!"{← getRoot}{page.fileName}"}>{page.name}</a></div>
 
 /--
 The main entry point to rendering the navbar on the left hand side.
 -/
-def navbar (supplement : Array (Process.SupplementPage textFormat)) : BaseHtmlM Html := do
+def navbar (supplement : Array (SupplementPage textFormat)) : BaseHtmlM Html := do
   let mut staticPages : Array Html := #[
     <div class="nav_link"><a href={s!"{← getRoot}"}>index</a></div>,
     <div class="nav_link"><a href={s!"{← getRoot}foundational_types.html"}>foundational types</a></div>
