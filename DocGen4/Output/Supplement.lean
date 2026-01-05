@@ -72,11 +72,13 @@ def builtinSupplement : Std.HashMap String (SupplementPage Html) := .ofList [
     name := "Commands",
     intro := <p>Commands provide a way to interact with and modify a Lean environment outside of the context of a proof. Familiar commands from core Lean include <code>#check</code>, <code>#eval</code>, and <code>run_cmd</code>.</p>,
     sections := #[],
+    definingModule := none,
   }),
   ("Tactics", {
     name := "Tactics",
     intro := <p>The tactic language is a special-purpose programming language for constructing proofs, indicated using the <code>by</code> keyword.</p>,
     sections := #[],
+    definingModule := none,
   }),
 ]
 
@@ -123,8 +125,9 @@ def loadSupplementJSON (filePath : System.FilePath) : IO (Array (SupplementPage 
 This `abbrev` exists as a type-checking wrapper around `toJson`, ensuring `loadSupplementJSON` gets
 objects in the expected format.
 -/
-abbrev saveSupplementPageJSON (fileName : System.FilePath) (pages : Array (SupplementPageEntry Html)) : IO Unit :=
-  IO.FS.writeFile fileName (toString (toJson pages))
+abbrev saveSupplementPageJSON (fileName : System.FilePath) (pages : Array (SupplementPageEntry Html)) : IO Unit := do
+  if pages.size > 0 then
+    IO.FS.writeFile fileName (toString (toJson pages))
 
 /-- Save sections of supplementary pages declared in a specific module.
 
@@ -132,7 +135,8 @@ This `abbrev` exists as a type-checking wrapper around `toJson`, ensuring `loadS
 objects in the expected format.
 -/
 abbrev saveSupplementSectionJSON (fileName : System.FilePath) (sections : Array (SupplementSectionEntry Html)) : IO Unit := do
-  IO.FS.writeFile fileName (toString (toJson sections))
+  if sections.size > 0 then
+    IO.FS.writeFile fileName (toString (toJson sections))
 
 end Output
 end DocGen4

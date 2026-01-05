@@ -37,7 +37,7 @@ public structure SupplementSection (textFormat : Type) where
   /-- Main contents of this section. -/
   text : textFormat
 
-  /-- Module where this section is defined. -/
+  /-- Module where this section is defined. Will be set by `registerSupplementSection`. -/
   definingModule : Option Name
   /-- Declaration(s) relating to this section. 
 
@@ -56,7 +56,10 @@ public structure SupplementPage (textFormat : Type) where
   name : String
   /-- Page introduction. -/
   intro : textFormat
-  /-- Sections of the page. -/
+
+  /-- Module where this page is defined. Will be set by `registerSupplementPage`. -/
+  definingModule : Option Name
+  /-- Sections of the page. Will be computed by DocGen during processing of the supplement pages. -/
   sections : Array (SupplementSection textFormat)
 
 /-- A section out of a `SupplementPage`, plus information on where to place the section. -/
@@ -72,6 +75,11 @@ public structure SupplementPageEntry (textFormat) extends SupplementPage textFor
   key : String
 deriving FromJson, ToJson
 
+/-- This environment extension allows adding supplement pages that will be rendered by DocGen.
+Add entries using the `SubDocGen.registerSupplementPage` function or
+`register_supplement_page` command.
+-/
+-- Pages are stored as a `HashMap` for easy existence checking.
 public meta initialize supplementPageExt : SimplePersistentEnvExtension (SupplementPageEntry MarkdownDocstring)
     (Std.HashMap String (SupplementPageEntry MarkdownDocstring)) ←
   registerSimplePersistentEnvExtension {
@@ -79,32 +87,46 @@ public meta initialize supplementPageExt : SimplePersistentEnvExtension (Supplem
     addEntryFn m a := m.insert a.key a
   }
 
+/-- This environment extension allows adding sections to supplement pages.
+Add entries using the `SubDocGen.registerSupplementSection` function or
+`register_supplement_section` command.
+
+See also `SubDocGen.supplementPageExt`.
+-/
+-- Sections are stored as an array since they are all scanned through per-module anyway.
 public meta initialize supplementSectionExt : SimplePersistentEnvExtension (SupplementSectionEntry MarkdownDocstring)
-    (Std.HashMap String (SupplementSectionEntry MarkdownDocstring)) ←
+    (Array (SupplementSectionEntry MarkdownDocstring)) ←
   registerSimplePersistentEnvExtension {
-    addImportedFn as := as.foldl (fun m as => m.insertMany (as.map fun a => (a.pageKey, a))) {}
-    addEntryFn m a := m.insert a.pageKey a
+    addImportedFn as := as.flatten
+    addEntryFn as a := as.push a
   }
 
-variable {m} [Monad m] [MonadEnv m]
+variable {m} [Monad m] [MonadEnv m] [MonadError m]
 
 /-- Add a page (with perhaps some predefined sections) to the DocGen supplement.
 This function is the interface for metaprograms: the command `register_supplement_page` is the
 basic wrapper for users.
 
+Page keys should be unique. If not, this function throws an error.
+
 Further sections to this page can be added by calling `registerSupplementSection`.
 -/
 public meta def registerSupplementPage (page : SupplementPageEntry MarkdownDocstring) : m Unit := do
-  modifyEnv (supplementPageExt.addEntry · page)
+  if (supplementPageExt.getState (← getEnv)).contains page.key then
+    throwError m!"registerSupplementPage: there is already a page with key `{page.key}`."
+  modifyEnv (supplementPageExt.addEntry · { page with definingModule := (← getEnv).header.mainModule })
 
 /-- Add a section to a page in the DocGen supplement.
 This function is the interface for metaprograms: the command `register_supplement_section` is the
 basic wrapper for users.
 
 The page that this section appears in should first be declared using `registerSupplementPage`.
+If not, this function throws an error.
 -/
 public meta def registerSupplementSection (sec : SupplementSectionEntry MarkdownDocstring) : m Unit := do
-  modifyEnv (supplementSectionExt.addEntry · sec)
+  if !(supplementPageExt.getState (← getEnv)).contains sec.pageKey then
+    throwError m!"registerSupplementSection: no page has been declared with key `{sec.pageKey}`."
+  modifyEnv (supplementSectionExt.addEntry · { sec with definingModule := (← getEnv).header.mainModule })
 
 open Elab Command in
 /-- `register_supplement_page key "Page Title" /-- Introduction text -/`
@@ -117,6 +139,7 @@ elab "register_supplement_page " name:ident ppSpace title:str ppSpace dc:docComm
     key := name.getId.toString
     name := title.getString
     intro := dc.getDocString
+    definingModule := none
     sections := #[]
   }
 

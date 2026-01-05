@@ -146,8 +146,11 @@ def collectTactics (module : Name) (env : Environment) :
 /-- Collect info for pages to display in addition to the module docs. -/
 def getAdditionalInfo (module : Name) (env : Environment) :
     MetaM (Array (SupplementPageEntry String) × Array (SupplementSectionEntry MarkdownDocstring)) := do
-  let mut pages := (supplementPageExt.getState env).values.toArray
-  let mut sections := (supplementSectionExt.getState env).values.toArray
+  -- Only add pages and sections declared in a particular module.
+  let mut pages := (supplementPageExt.getState env).values.toArray.filter (·.definingModule == some module)
+  let mut sections := (supplementSectionExt.getState env).filter (·.definingModule == some module)
+
+  dbg_trace "Module: {module}, sections {sections.map (· |>.name)}"
 
   sections := sections.append (← collectCommands module env)
   sections := sections.append (← collectTactics module env)
